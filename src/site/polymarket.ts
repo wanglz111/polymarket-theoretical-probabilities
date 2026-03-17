@@ -1,8 +1,8 @@
-import type { PageContext, PriceRow } from "../domain/types";
+import type { PageContext, PriceRow, Underlying } from "../domain/types";
 
 const TEXT_BLOCK_SELECTOR = "p, span";
 const THEORETICAL_ATTR = "data-theoretical-probability";
-const SUPPORTED_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth)-hit/i;
+const SUPPORTED_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
 const MARKET_TIME_ZONE = "America/New_York";
 
 const MONTH_LOOKUP: Record<string, number> = {
@@ -111,14 +111,14 @@ export function parseBarrier(text: string): number | null {
     normalized.length === 0 ||
     normalized.includes("%") ||
     /vol\.?$/i.test(normalized) ||
-    !/^((btc|eth|bitcoin|ethereum)\s+)?([↑↓]\s*)?\$?\s*\d[\d,]*(?:\.\d+)?\s*k?$/i.test(
+    !/^((btc|eth|sol|bitcoin|ethereum|solana)\s+)?([↑↓]\s*)?\$?\s*\d[\d,]*(?:\.\d+)?\s*k?$/i.test(
       normalized,
     )
   ) {
     return null;
   }
 
-  const value = normalized.replace(/(btc|eth|bitcoin|ethereum|[↑↓$,\s])/gi, "").toLowerCase();
+  const value = normalized.replace(/(btc|eth|sol|bitcoin|ethereum|solana|[↑↓$,\s])/gi, "").toLowerCase();
 
   if (value.endsWith("k")) {
     const parsedK = Number.parseFloat(value.slice(0, -1));
@@ -129,7 +129,7 @@ export function parseBarrier(text: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function parseUnderlying(text: string): "BTC" | "ETH" | null {
+export function parseUnderlying(text: string): Underlying | null {
   const lower = text.toLowerCase();
 
   if (lower.includes("bitcoin") || /\bbtc\b/.test(lower)) {
@@ -138,6 +138,10 @@ export function parseUnderlying(text: string): "BTC" | "ETH" | null {
 
   if (lower.includes("ethereum") || /\beth\b/.test(lower)) {
     return "ETH";
+  }
+
+  if (lower.includes("solana") || /\bsol\b/.test(lower)) {
+    return "SOL";
   }
 
   return null;
@@ -252,7 +256,7 @@ function getNormalizedTitle(documentRef: Document): string {
 
 function parseExpiryFromText(text: string): number | null {
   const lower = text.toLowerCase();
-  const yearMatch = lower.match(/\b(20\d{2})\b/);
+  const yearMatch = lower.match(/\b(\d{4})\b/);
   const monthMatch = lower.match(
     /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/,
   );

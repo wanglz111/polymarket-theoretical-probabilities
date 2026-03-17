@@ -1,3 +1,5 @@
+import type { Underlying } from "../domain/types";
+
 interface DeribitRequestResult<T> {
   result: T;
 }
@@ -24,26 +26,23 @@ interface InstrumentsCacheEntry {
   value: Instrument[];
 }
 
-type SupportedUnderlying = "BTC" | "ETH";
-type InstrumentsCache = Partial<Record<SupportedUnderlying, InstrumentsCacheEntry>>;
+type InstrumentsCache = Partial<Record<Underlying, InstrumentsCacheEntry>>;
 
 export interface DeribitClient {
-  getReferenceIV(
-    currency: SupportedUnderlying,
-    expiryUtcMs: number,
-    spot: number,
-  ): Promise<number | null>;
-  getSpot(currency: SupportedUnderlying): Promise<number>;
+  getReferenceIV(currency: Underlying, expiryUtcMs: number, spot: number): Promise<number | null>;
+  getSpot(currency: Underlying): Promise<number>;
 }
 
-const INDEX_BY_CURRENCY: Record<SupportedUnderlying, string> = {
+const INDEX_BY_CURRENCY: Record<Underlying, string> = {
   BTC: "btc_usd",
   ETH: "eth_usd",
+  SOL: "sol_usdc",
 };
 
-const INSTRUMENT_CURRENCY: Record<SupportedUnderlying, string> = {
+const INSTRUMENT_CURRENCY: Record<Underlying, string> = {
   BTC: "BTC",
   ETH: "ETH",
+  SOL: "SOL",
 };
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
@@ -51,7 +50,7 @@ const TEN_MINUTES_MS = 10 * 60 * 1000;
 export function createDeribitClient(): DeribitClient {
   const instrumentsCache: InstrumentsCache = {};
 
-  async function getSpot(currency: SupportedUnderlying): Promise<number> {
+  async function getSpot(currency: Underlying): Promise<number> {
     const response = await request<IndexPriceResult>(
       `https://www.deribit.com/api/v2/public/get_index_price?index_name=${INDEX_BY_CURRENCY[currency]}`,
     );
@@ -65,7 +64,7 @@ export function createDeribitClient(): DeribitClient {
     return spot;
   }
 
-  async function getInstruments(currency: SupportedUnderlying): Promise<Instrument[]> {
+  async function getInstruments(currency: Underlying): Promise<Instrument[]> {
     const now = Date.now();
     const cached = instrumentsCache[currency];
 
@@ -94,7 +93,7 @@ export function createDeribitClient(): DeribitClient {
   }
 
   async function getReferenceIV(
-    currency: SupportedUnderlying,
+    currency: Underlying,
     expiryUtcMs: number,
     spot: number,
   ): Promise<number | null> {

@@ -1,6 +1,8 @@
+export type Underlying = "BTC" | "ETH" | "SOL";
+
 export interface PageContext {
   expiryUtcMs: number;
-  underlying: "BTC" | "ETH";
+  underlying: Underlying;
   slug: string;
   title: string;
 }

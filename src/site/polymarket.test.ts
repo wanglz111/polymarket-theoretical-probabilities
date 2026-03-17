@@ -61,6 +61,50 @@ describe("parsePageContext", () => {
     expect(page?.expiryUtcMs).toBeDefined();
   });
 
+  it("parses SOL event slugs", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/what-price-will-solana-hit-in-july-2027",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("SOL");
+    expect(expiry.getUTCFullYear()).toBe(2027);
+    expect(expiry.getUTCMonth()).toBe(7);
+    expect(expiry.getUTCDate()).toBe(1);
+    expect(expiry.getUTCHours()).toBe(3);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
+  });
+
+  it("parses arbitrary month and year slugs", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/what-price-will-bitcoin-hit-in-october-2031",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("BTC");
+    expect(expiry.getUTCFullYear()).toBe(2031);
+    expect(expiry.getUTCMonth()).toBe(10);
+    expect(expiry.getUTCDate()).toBe(1);
+    expect(expiry.getUTCHours()).toBe(3);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
+  });
+
   it("parses weekly BTC slug ranges using the end day", () => {
     const page = parsePageContext(
       {
