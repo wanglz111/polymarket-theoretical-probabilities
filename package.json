@@ -1,6 +1,6 @@
 {
-  "name": "one-touch-market",
-  "version": "0.1.0",
+  "name": "polymarket-touch-probabilities",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {

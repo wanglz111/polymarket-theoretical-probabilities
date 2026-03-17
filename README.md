@@ -1,4 +1,4 @@
-# one-touch-market
+# polymarket-touch-probabilities
 
 Tampermonkey userscript project for injecting theoretical touch probabilities into Polymarket target-price pages.
 

@@ -1,8 +1,7 @@
 // ==UserScript==
-// @name         Polymarket Theoretical Probability
-// @namespace    https://local.one-touch-market/
-// @version      0.1.0
-// @description  Inject theoretical BTC and ETH touch probabilities into Polymarket target price rows
+// @name         Polymarket Touch Probabilities
+// @version      0.2.0
+// @description  Inject theoretical BTC, ETH, and SOL touch probabilities into Polymarket target price rows
 // @match        https://polymarket.com/*
 // @match        https://*.polymarket.com/*
 // @connect      www.deribit.com

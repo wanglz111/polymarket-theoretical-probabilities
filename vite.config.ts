@@ -9,11 +9,10 @@ export default defineConfig({
     monkey({
       entry: "src/main.ts",
       userscript: {
-        name: "Polymarket Theoretical Probability",
-        namespace: "https://local.one-touch-market/",
-        version: "0.1.0",
+        name: "Polymarket Touch Probabilities",
+        version: "0.2.0",
         description:
-          "Inject theoretical BTC and ETH touch probabilities into Polymarket target price rows",
+          "Inject theoretical BTC, ETH, and SOL touch probabilities into Polymarket target price rows",
         match: ["https://polymarket.com/*", "https://*.polymarket.com/*"],
         grant: ["GM_xmlhttpRequest"],
         connect: ["www.deribit.com"],
