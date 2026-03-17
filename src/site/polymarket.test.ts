@@ -35,8 +35,15 @@ describe("parsePageContext", () => {
       } as unknown as Location,
     );
 
+    const expiry = new Date(page!.expiryUtcMs);
+
     expect(page?.underlying).toBe("BTC");
     expect(page?.expiryUtcMs).toBeDefined();
+    expect(expiry.getUTCMonth()).toBe(3);
+    expect(expiry.getUTCDate()).toBe(1);
+    expect(expiry.getUTCHours()).toBe(3);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
   });
 
   it("parses ETH event slugs", () => {
@@ -52,5 +59,62 @@ describe("parsePageContext", () => {
 
     expect(page?.underlying).toBe("ETH");
     expect(page?.expiryUtcMs).toBeDefined();
+  });
+
+  it("parses weekly BTC slug ranges using the end day", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/what-price-will-bitcoin-hit-march-16-22",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("BTC");
+    expect(expiry.getUTCMonth()).toBe(2);
+    expect(expiry.getUTCDate()).toBe(23);
+    expect(expiry.getUTCHours()).toBe(3);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
+    expect(expiry.getUTCFullYear()).toBe(new Date().getUTCFullYear());
+  });
+
+  it("parses on-march-17 pages using New York end of day", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/what-price-will-bitcoin-hit-on-march-17",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("BTC");
+    expect(expiry.getUTCMonth()).toBe(2);
+    expect(expiry.getUTCDate()).toBe(18);
+    expect(expiry.getUTCHours()).toBe(3);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
+  });
+
+  it("does not support above-on pages", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/bitcoin-above-on-march-23",
+      } as unknown as Location,
+    );
+
+    expect(page).toBeNull();
   });
 });

@@ -2,6 +2,8 @@ import type { PageContext, PriceRow } from "../domain/types";
 
 const TEXT_BLOCK_SELECTOR = "p, span";
 const THEORETICAL_ATTR = "data-theoretical-probability";
+const SUPPORTED_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth)-hit/i;
+const MARKET_TIME_ZONE = "America/New_York";
 
 const MONTH_LOOKUP: Record<string, number> = {
   apr: 3,
@@ -39,7 +41,7 @@ export function parsePageContext(documentRef: Document, location: Location): Pag
   const eventSlug = parseEventSlug(location.pathname);
   const sourceText = eventSlug ?? title;
 
-  if (!sourceText) {
+  if (!sourceText || !SUPPORTED_EVENT_PATTERN.test(sourceText)) {
     return null;
   }
 
@@ -265,12 +267,20 @@ function parseExpiryFromText(text: string): number | null {
   const monthIndex = monthMatch.index ?? 0;
   const afterMonth = lower.slice(monthIndex + monthMatch[0].length);
   const beforeMonth = lower.slice(0, monthIndex);
+  const afterDayRangeMatch = afterMonth.match(
+    /^(?:[\s\-_\/]+)(\d{1,2})(?!\d)(?:[\s\-_\/]+(\d{1,2})(?!\d))?/,
+  );
   const afterDayMatch = afterMonth.match(/^\s+(\d{1,2})(?!\d)/);
   const beforeDayMatch = beforeMonth.match(/(\d{1,2})\s+$/);
-  const dayMatch = afterDayMatch ?? beforeDayMatch;
-  const day = dayMatch ? Number.parseInt(dayMatch[1], 10) : lastUtcDayOfMonth(year, month);
+  const day = afterDayRangeMatch
+    ? Number.parseInt(afterDayRangeMatch[2] ?? afterDayRangeMatch[1], 10)
+    : afterDayMatch
+      ? Number.parseInt(afterDayMatch[1], 10)
+      : beforeDayMatch
+        ? Number.parseInt(beforeDayMatch[1], 10)
+        : lastUtcDayOfMonth(year, month);
 
-  return Date.UTC(year, month, day, 23, 59, 59);
+  return zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
 }
 
 function parseEventSlug(pathname: string): string | null {
@@ -285,6 +295,71 @@ function parseEventSlug(pathname: string): string | null {
 
 function lastUtcDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+function zonedDateTimeToUtcMs(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string,
+): number {
+  const targetUtcLike = Date.UTC(year, month, day, hour, minute, second);
+  let guess = targetUtcLike;
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const parts = getTimeZoneParts(guess, timeZone);
+    const interpretedUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+
+    guess += targetUtcLike - interpretedUtc;
+  }
+
+  return guess;
+}
+
+function getTimeZoneParts(timestamp: number, timeZone: string): {
+  day: number;
+  hour: number;
+  minute: number;
+  month: number;
+  second: number;
+  year: number;
+} {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    timeZone,
+    year: "numeric",
+  });
+
+  const parts = formatter.formatToParts(new Date(timestamp));
+  const lookup = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number.parseInt(part.value, 10)]),
+  ) as Record<string, number>;
+
+  return {
+    day: lookup.day,
+    hour: lookup.hour,
+    minute: lookup.minute,
+    month: lookup.month,
+    second: lookup.second,
+    year: lookup.year,
+  };
 }
 
 function isLeafLike(node: HTMLElement): boolean {
