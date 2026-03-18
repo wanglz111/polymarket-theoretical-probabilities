@@ -2,7 +2,8 @@ import type { PageContext, PriceRow, Underlying } from "../domain/types";
 
 const TEXT_BLOCK_SELECTOR = "p, span";
 const THEORETICAL_ATTR = "data-theoretical-probability";
-const SUPPORTED_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
+const HIT_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
+const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
 const MARKET_TIME_ZONE = "America/New_York";
 
 const MONTH_LOOKUP: Record<string, number> = {
@@ -41,26 +42,34 @@ export function parsePageContext(documentRef: Document, location: Location): Pag
   const eventSlug = parseEventSlug(location.pathname);
   const sourceText = eventSlug ?? title;
 
-  if (!sourceText || !SUPPORTED_EVENT_PATTERN.test(sourceText)) {
+  if (!sourceText) {
+    return null;
+  }
+
+  const marketDetails = parseMarketDetails(sourceText);
+
+  if (!marketDetails) {
     return null;
   }
 
   const underlying = parseUnderlying(sourceText);
-  const expiryUtcMs = parseExpiryFromText(sourceText);
+  const expiryUtcMs = parseExpiryFromText(sourceText, marketDetails.pricingStyle);
 
   if (!underlying || !expiryUtcMs) {
     return null;
   }
 
   return {
+    defaultDirection: marketDetails.defaultDirection,
     expiryUtcMs,
     slug: eventSlug ?? location.pathname,
+    pricingStyle: marketDetails.pricingStyle,
     title,
     underlying,
   };
 }
 
-export function collectPriceRows(root: HTMLElement): PriceRow[] {
+export function collectPriceRows(root: HTMLElement, page: PageContext): PriceRow[] {
   const probabilityNodes = Array.from(root.querySelectorAll<HTMLElement>("p"))
     .filter(isVisible)
     .filter(isLeafLike)
@@ -90,7 +99,7 @@ export function collectPriceRows(root: HTMLElement): PriceRow[] {
 
     rows.set(row, {
       barrier,
-      direction: parseDirection(priceNode.textContent ?? "") ?? "up",
+      direction: parseDirection(priceNode.textContent ?? "") ?? page.defaultDirection ?? "up",
       marketProbability: parseProbability(probabilityNode.textContent ?? "") ?? undefined,
       priceNode,
       probabilityNode,
@@ -157,6 +166,25 @@ function parseDirection(text: string): "up" | "down" | null {
   }
 
   return null;
+}
+
+function parseMarketDetails(
+  text: string,
+): { defaultDirection?: "up" | "down"; pricingStyle: "binary" | "touch" } | null {
+  if (HIT_EVENT_PATTERN.test(text)) {
+    return { pricingStyle: "touch" };
+  }
+
+  const binaryMatch = text.match(BINARY_EVENT_PATTERN);
+
+  if (!binaryMatch) {
+    return null;
+  }
+
+  return {
+    defaultDirection: binaryMatch[2] === "below" ? "down" : "up",
+    pricingStyle: "binary",
+  };
 }
 
 function locateRow(probabilityNode: HTMLElement): HTMLElement | null {
@@ -254,7 +282,7 @@ function getNormalizedTitle(documentRef: Document): string {
   return heading || documentRef.title || "";
 }
 
-function parseExpiryFromText(text: string): number | null {
+function parseExpiryFromText(text: string, pricingStyle: "binary" | "touch"): number | null {
   const lower = text.toLowerCase();
   const yearMatch = lower.match(/\b(\d{4})\b/);
   const monthMatch = lower.match(
@@ -284,7 +312,9 @@ function parseExpiryFromText(text: string): number | null {
         ? Number.parseInt(beforeDayMatch[1], 10)
         : lastUtcDayOfMonth(year, month);
 
-  return zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
+  return pricingStyle === "binary"
+    ? zonedDateTimeToUtcMs(year, month, day, 12, 0, 0, MARKET_TIME_ZONE)
+    : zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
 }
 
 function parseEventSlug(pathname: string): string | null {

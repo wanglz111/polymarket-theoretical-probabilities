@@ -32,7 +32,7 @@ export async function bootstrap(): Promise<void> {
         return;
       }
 
-      const rows = collectPriceRows(document.body);
+      const rows = collectPriceRows(document.body, page);
 
       if (rows.length === 0) {
         return;

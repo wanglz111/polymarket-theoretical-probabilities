@@ -170,6 +170,18 @@
     }
     return clamp(calculateDownTouchProbability(barrier, q, r, sigma, spot, timeToExpiryYears), 0, 1);
   }
+  function binaryExpiryProb(input) {
+    const { barrier, direction, q, r, sigma, spot, timeToExpiryYears } = input;
+    if (!Number.isFinite(barrier) || !Number.isFinite(spot) || barrier <= 0 || spot <= 0) {
+      return 0;
+    }
+    if (timeToExpiryYears <= 0 || sigma <= 0) {
+      return 0;
+    }
+    const sigmaSqrtT = sigma * Math.sqrt(timeToExpiryYears);
+    const d2 = (Math.log(spot / barrier) + (r - q - 0.5 * sigma * sigma) * timeToExpiryYears) / sigmaSqrtT;
+    return clamp(direction === "up" ? normalCdf(d2) : normalCdf(-d2), 0, 1);
+  }
   function calculateUpTouchProbability(barrier, q, r, sigma, spot, timeToExpiryYears) {
     const a = Math.log(barrier / spot);
     const sigmaSqrtT = sigma * Math.sqrt(timeToExpiryYears);
@@ -202,7 +214,15 @@
     );
     return params.rows.map((row) => ({
       row,
-      value: oneTouchHitProb({
+      value: params.page.pricingStyle === "binary" ? binaryExpiryProb({
+        barrier: row.barrier,
+        direction: row.direction,
+        q: 0,
+        r: 0,
+        sigma: referenceIV,
+        spot,
+        timeToExpiryYears
+      }) : oneTouchHitProb({
         barrier: row.barrier,
         direction: row.direction,
         q: 0,
@@ -215,7 +235,8 @@
   }
   const TEXT_BLOCK_SELECTOR = "p, span";
   const THEORETICAL_ATTR = "data-theoretical-probability";
-  const SUPPORTED_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
+  const HIT_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
+  const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
   const MARKET_TIME_ZONE = "America/New_York";
   const MONTH_LOOKUP = {
     apr: 3,
@@ -250,22 +271,28 @@
     const title = getNormalizedTitle(documentRef);
     const eventSlug = parseEventSlug(location.pathname);
     const sourceText = eventSlug ?? title;
-    if (!sourceText || !SUPPORTED_EVENT_PATTERN.test(sourceText)) {
+    if (!sourceText) {
+      return null;
+    }
+    const marketDetails = parseMarketDetails(sourceText);
+    if (!marketDetails) {
       return null;
     }
     const underlying = parseUnderlying(sourceText);
-    const expiryUtcMs = parseExpiryFromText(sourceText);
+    const expiryUtcMs = parseExpiryFromText(sourceText, marketDetails.pricingStyle);
     if (!underlying || !expiryUtcMs) {
       return null;
     }
     return {
+      defaultDirection: marketDetails.defaultDirection,
       expiryUtcMs,
       slug: eventSlug ?? location.pathname,
+      pricingStyle: marketDetails.pricingStyle,
       title,
       underlying
     };
   }
-  function collectPriceRows(root) {
+  function collectPriceRows(root, page) {
     const probabilityNodes = Array.from(root.querySelectorAll("p")).filter(isVisible).filter(isLeafLike).filter((node) => parseProbability(node.textContent ?? "") !== null).filter(isPrimaryProbabilityNode);
     const rows = /* @__PURE__ */ new Map();
     for (const probabilityNode of probabilityNodes) {
@@ -283,7 +310,7 @@
       }
       rows.set(row, {
         barrier,
-        direction: parseDirection(priceNode.textContent ?? "") ?? "up",
+        direction: parseDirection(priceNode.textContent ?? "") ?? page.defaultDirection ?? "up",
         marketProbability: parseProbability(probabilityNode.textContent ?? "") ?? void 0,
         priceNode,
         probabilityNode,
@@ -328,6 +355,19 @@
       return "down";
     }
     return null;
+  }
+  function parseMarketDetails(text) {
+    if (HIT_EVENT_PATTERN.test(text)) {
+      return { pricingStyle: "touch" };
+    }
+    const binaryMatch = text.match(BINARY_EVENT_PATTERN);
+    if (!binaryMatch) {
+      return null;
+    }
+    return {
+      defaultDirection: binaryMatch[2] === "below" ? "down" : "up",
+      pricingStyle: "binary"
+    };
   }
   function locateRow(probabilityNode) {
     let current = probabilityNode;
@@ -388,7 +428,7 @@
     const heading = documentRef.querySelector("h1")?.textContent?.trim();
     return heading || documentRef.title || "";
   }
-  function parseExpiryFromText(text) {
+  function parseExpiryFromText(text, pricingStyle) {
     const lower = text.toLowerCase();
     const yearMatch = lower.match(/\b(\d{4})\b/);
     const monthMatch = lower.match(
@@ -409,7 +449,7 @@
     const afterDayMatch = afterMonth.match(/^\s+(\d{1,2})(?!\d)/);
     const beforeDayMatch = beforeMonth.match(/(\d{1,2})\s+$/);
     const day = afterDayRangeMatch ? Number.parseInt(afterDayRangeMatch[2] ?? afterDayRangeMatch[1], 10) : afterDayMatch ? Number.parseInt(afterDayMatch[1], 10) : beforeDayMatch ? Number.parseInt(beforeDayMatch[1], 10) : lastUtcDayOfMonth(year, month);
-    return zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
+    return pricingStyle === "binary" ? zonedDateTimeToUtcMs(year, month, day, 12, 0, 0, MARKET_TIME_ZONE) : zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
   }
   function parseEventSlug(pathname) {
     const match = pathname.match(/^\/event\/([^/]+)/i);
@@ -564,7 +604,7 @@
         if (!page) {
           return;
         }
-        const rows = collectPriceRows(document.body);
+        const rows = collectPriceRows(document.body, page);
         if (rows.length === 0) {
           return;
         }

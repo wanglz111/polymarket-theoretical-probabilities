@@ -1,8 +1,11 @@
 export type Underlying = "BTC" | "ETH" | "SOL";
+export type PricingStyle = "binary" | "touch";
 
 export interface PageContext {
+  defaultDirection?: "up" | "down";
   expiryUtcMs: number;
   underlying: Underlying;
+  pricingStyle: PricingStyle;
   slug: string;
   title: string;
 }

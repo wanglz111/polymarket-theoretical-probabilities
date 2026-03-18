@@ -38,6 +38,7 @@ describe("parsePageContext", () => {
     const expiry = new Date(page!.expiryUtcMs);
 
     expect(page?.underlying).toBe("BTC");
+    expect(page?.pricingStyle).toBe("touch");
     expect(page?.expiryUtcMs).toBeDefined();
     expect(expiry.getUTCMonth()).toBe(3);
     expect(expiry.getUTCDate()).toBe(1);
@@ -58,6 +59,7 @@ describe("parsePageContext", () => {
     );
 
     expect(page?.underlying).toBe("ETH");
+    expect(page?.pricingStyle).toBe("touch");
     expect(page?.expiryUtcMs).toBeDefined();
   });
 
@@ -75,6 +77,7 @@ describe("parsePageContext", () => {
     const expiry = new Date(page!.expiryUtcMs);
 
     expect(page?.underlying).toBe("SOL");
+    expect(page?.pricingStyle).toBe("touch");
     expect(expiry.getUTCFullYear()).toBe(2027);
     expect(expiry.getUTCMonth()).toBe(7);
     expect(expiry.getUTCDate()).toBe(1);
@@ -97,6 +100,7 @@ describe("parsePageContext", () => {
     const expiry = new Date(page!.expiryUtcMs);
 
     expect(page?.underlying).toBe("BTC");
+    expect(page?.pricingStyle).toBe("touch");
     expect(expiry.getUTCFullYear()).toBe(2031);
     expect(expiry.getUTCMonth()).toBe(10);
     expect(expiry.getUTCDate()).toBe(1);
@@ -119,6 +123,7 @@ describe("parsePageContext", () => {
     const expiry = new Date(page!.expiryUtcMs);
 
     expect(page?.underlying).toBe("BTC");
+    expect(page?.pricingStyle).toBe("touch");
     expect(expiry.getUTCMonth()).toBe(2);
     expect(expiry.getUTCDate()).toBe(23);
     expect(expiry.getUTCHours()).toBe(3);
@@ -141,6 +146,7 @@ describe("parsePageContext", () => {
     const expiry = new Date(page!.expiryUtcMs);
 
     expect(page?.underlying).toBe("BTC");
+    expect(page?.pricingStyle).toBe("touch");
     expect(expiry.getUTCMonth()).toBe(2);
     expect(expiry.getUTCDate()).toBe(18);
     expect(expiry.getUTCHours()).toBe(3);
@@ -148,17 +154,49 @@ describe("parsePageContext", () => {
     expect(expiry.getUTCSeconds()).toBe(59);
   });
 
-  it("does not support above-on pages", () => {
+  it("parses above-on pages as binary up markets", () => {
     const page = parsePageContext(
       {
         querySelector: () => null,
         title: "ignored",
       } as unknown as Document,
       {
-        pathname: "/event/bitcoin-above-on-march-23",
+        pathname: "/event/ethereum-above-on-march-18",
       } as unknown as Location,
     );
 
-    expect(page).toBeNull();
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("ETH");
+    expect(page?.pricingStyle).toBe("binary");
+    expect(page?.defaultDirection).toBe("up");
+    expect(expiry.getUTCMonth()).toBe(2);
+    expect(expiry.getUTCDate()).toBe(18);
+    expect(expiry.getUTCHours()).toBe(16);
+    expect(expiry.getUTCMinutes()).toBe(0);
+    expect(expiry.getUTCSeconds()).toBe(0);
+  });
+
+  it("parses below-on pages as binary down markets", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/solana-below-on-march-21",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("SOL");
+    expect(page?.pricingStyle).toBe("binary");
+    expect(page?.defaultDirection).toBe("down");
+    expect(expiry.getUTCMonth()).toBe(2);
+    expect(expiry.getUTCDate()).toBe(21);
+    expect(expiry.getUTCHours()).toBe(16);
+    expect(expiry.getUTCMinutes()).toBe(0);
+    expect(expiry.getUTCSeconds()).toBe(0);
   });
 });

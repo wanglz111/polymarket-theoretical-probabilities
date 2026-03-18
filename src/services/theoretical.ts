@@ -1,4 +1,4 @@
-import { oneTouchHitProb } from "../domain/model";
+import { binaryExpiryProb, oneTouchHitProb } from "../domain/model";
 import type { PageContext, PriceRow, RowProbability } from "../domain/types";
 import type { DeribitClient } from "./deribit";
 
@@ -25,14 +25,25 @@ export async function computeTheoreticalProbabilities(
 
   return params.rows.map((row) => ({
     row,
-    value: oneTouchHitProb({
-      barrier: row.barrier,
-      direction: row.direction,
-      q: 0,
-      r: 0,
-      sigma: referenceIV,
-      spot,
-      timeToExpiryYears,
-    }),
+    value:
+      params.page.pricingStyle === "binary"
+        ? binaryExpiryProb({
+            barrier: row.barrier,
+            direction: row.direction,
+            q: 0,
+            r: 0,
+            sigma: referenceIV,
+            spot,
+            timeToExpiryYears,
+          })
+        : oneTouchHitProb({
+            barrier: row.barrier,
+            direction: row.direction,
+            q: 0,
+            r: 0,
+            sigma: referenceIV,
+            spot,
+            timeToExpiryYears,
+          }),
   }));
 }

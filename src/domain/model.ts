@@ -36,6 +36,24 @@ export function oneTouchHitProb(input: ModelInput): number {
   return clamp(calculateDownTouchProbability(barrier, q, r, sigma, spot, timeToExpiryYears), 0, 1);
 }
 
+export function binaryExpiryProb(input: ModelInput): number {
+  const { barrier, direction, q, r, sigma, spot, timeToExpiryYears } = input;
+
+  if (!Number.isFinite(barrier) || !Number.isFinite(spot) || barrier <= 0 || spot <= 0) {
+    return 0;
+  }
+
+  if (timeToExpiryYears <= 0 || sigma <= 0) {
+    return 0;
+  }
+
+  const sigmaSqrtT = sigma * Math.sqrt(timeToExpiryYears);
+  const d2 =
+    (Math.log(spot / barrier) + (r - q - 0.5 * sigma * sigma) * timeToExpiryYears) / sigmaSqrtT;
+
+  return clamp(direction === "up" ? normalCdf(d2) : normalCdf(-d2), 0, 1);
+}
+
 function calculateUpTouchProbability(
   barrier: number,
   q: number,
