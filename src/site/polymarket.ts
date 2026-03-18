@@ -285,9 +285,16 @@ function getNormalizedTitle(documentRef: Document): string {
 function parseExpiryFromText(text: string, pricingStyle: "binary" | "touch"): number | null {
   const lower = text.toLowerCase();
   const yearMatch = lower.match(/\b(\d{4})\b/);
+  const beforeYearMatch = lower.match(/\bbefore[-\s_\/]+(\d{4})\b/);
   const monthMatch = lower.match(
     /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/,
   );
+
+  if (pricingStyle === "touch" && beforeYearMatch) {
+    const cutoffYear = Number.parseInt(beforeYearMatch[1], 10);
+
+    return zonedDateTimeToUtcMs(cutoffYear - 1, 11, 31, 23, 59, 59, MARKET_TIME_ZONE);
+  }
 
   if (!monthMatch) {
     return null;

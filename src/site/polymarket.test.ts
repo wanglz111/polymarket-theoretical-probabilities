@@ -109,6 +109,29 @@ describe("parsePageContext", () => {
     expect(expiry.getUTCSeconds()).toBe(59);
   });
 
+  it("parses before-year touch pages using the previous New York year-end", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/what-price-will-ethereum-hit-before-2027",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("ETH");
+    expect(page?.pricingStyle).toBe("touch");
+    expect(expiry.getUTCFullYear()).toBe(2027);
+    expect(expiry.getUTCMonth()).toBe(0);
+    expect(expiry.getUTCDate()).toBe(1);
+    expect(expiry.getUTCHours()).toBe(4);
+    expect(expiry.getUTCMinutes()).toBe(59);
+    expect(expiry.getUTCSeconds()).toBe(59);
+  });
+
   it("parses weekly BTC slug ranges using the end day", () => {
     const page = parsePageContext(
       {
