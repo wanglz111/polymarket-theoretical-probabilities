@@ -4,6 +4,7 @@ const TEXT_BLOCK_SELECTOR = "p, span";
 const THEORETICAL_ATTR = "data-theoretical-probability";
 const HIT_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
 const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
+const SUPPORTED_EVENT_SLUG_PATTERN = /\b(bitcoin|btc|ethereum|eth|solana|sol)\b/i;
 const MARKET_TIME_ZONE = "America/New_York";
 
 const MONTH_LOOKUP: Record<string, number> = {
@@ -34,12 +35,21 @@ const MONTH_LOOKUP: Record<string, number> = {
 };
 
 export function isSupportedPage(location: Location): boolean {
-  return location.hostname === "polymarket.com";
+  if (location.hostname !== "polymarket.com") {
+    return false;
+  }
+
+  const eventSlug = parseEventSlug(location.pathname);
+  return Boolean(eventSlug && isSupportedEventSlug(eventSlug));
 }
 
 export function parsePageContext(documentRef: Document, location: Location): PageContext | null {
-  const title = getNormalizedTitle(documentRef);
   const eventSlug = parseEventSlug(location.pathname);
+  if (!eventSlug || !isSupportedEventSlug(eventSlug)) {
+    return null;
+  }
+
+  const title = getNormalizedTitle(documentRef);
   const sourceText = eventSlug ?? title;
 
   if (!sourceText) {
@@ -332,6 +342,10 @@ function parseEventSlug(pathname: string): string | null {
   }
 
   return match[1];
+}
+
+function isSupportedEventSlug(eventSlug: string): boolean {
+  return SUPPORTED_EVENT_SLUG_PATTERN.test(eventSlug);
 }
 
 function lastUtcDayOfMonth(year: number, month: number): number {

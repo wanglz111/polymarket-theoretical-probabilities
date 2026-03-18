@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBarrier, parsePageContext } from "./polymarket";
+import { isSupportedPage, parseBarrier, parsePageContext } from "./polymarket";
 
 describe("parseBarrier", () => {
   it("parses formatted dollar values", () => {
@@ -24,6 +24,27 @@ describe("parseBarrier", () => {
 });
 
 describe("parsePageContext", () => {
+  it("rejects unsupported non-crypto event slugs early", () => {
+    expect(
+      isSupportedPage({
+        hostname: "polymarket.com",
+        pathname: "/event/will-it-rain-in-nyc-tomorrow",
+      } as Location),
+    ).toBe(false);
+
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "Will it rain in NYC tomorrow?",
+      } as unknown as Document,
+      {
+        pathname: "/event/will-it-rain-in-nyc-tomorrow",
+      } as unknown as Location,
+    );
+
+    expect(page).toBeNull();
+  });
+
   it("parses BTC event slugs", () => {
     const page = parsePageContext(
       {

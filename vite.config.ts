@@ -13,7 +13,7 @@ export default defineConfig({
         version: "0.2.0",
         description:
           "Inject theoretical BTC, ETH, and SOL probabilities into Polymarket touch and binary target price markets",
-        match: ["https://polymarket.com/*", "https://*.polymarket.com/*"],
+        match: ["https://polymarket.com/event/*"],
         grant: ["GM_xmlhttpRequest"],
         connect: ["www.deribit.com"],
         runAt: "document-idle",

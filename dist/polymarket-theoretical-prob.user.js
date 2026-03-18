@@ -2,8 +2,7 @@
 // @name         Polymarket Theoretical Probabilities
 // @version      0.2.0
 // @description  Inject theoretical BTC, ETH, and SOL probabilities into Polymarket touch and binary target price markets
-// @match        https://polymarket.com/*
-// @match        https://*.polymarket.com/*
+// @match        https://polymarket.com/event/*
 // @connect      www.deribit.com
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
@@ -237,6 +236,7 @@
   const THEORETICAL_ATTR = "data-theoretical-probability";
   const HIT_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)-hit/i;
   const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
+  const SUPPORTED_EVENT_SLUG_PATTERN = /\b(bitcoin|btc|ethereum|eth|solana|sol)\b/i;
   const MARKET_TIME_ZONE = "America/New_York";
   const MONTH_LOOKUP = {
     apr: 3,
@@ -265,11 +265,18 @@
     september: 8
   };
   function isSupportedPage(location) {
-    return location.hostname === "polymarket.com";
+    if (location.hostname !== "polymarket.com") {
+      return false;
+    }
+    const eventSlug = parseEventSlug(location.pathname);
+    return Boolean(eventSlug && isSupportedEventSlug(eventSlug));
   }
   function parsePageContext(documentRef, location) {
-    const title = getNormalizedTitle(documentRef);
     const eventSlug = parseEventSlug(location.pathname);
+    if (!eventSlug || !isSupportedEventSlug(eventSlug)) {
+      return null;
+    }
+    const title = getNormalizedTitle(documentRef);
     const sourceText = eventSlug ?? title;
     if (!sourceText) {
       return null;
@@ -462,6 +469,9 @@
       return null;
     }
     return match[1];
+  }
+  function isSupportedEventSlug(eventSlug) {
+    return SUPPORTED_EVENT_SLUG_PATTERN.test(eventSlug);
   }
   function lastUtcDayOfMonth(year, month) {
     return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
