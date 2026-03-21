@@ -48,6 +48,7 @@ dist/polymarket-theoretical-prob.user.js
 - Binary expiry markets:
   - `ethereum-above-on-march-18`
   - `solana-below-on-march-21`
+  - Explicit clock-time binary pages such as `bitcoin-above-on-march-21-2026-9am-et` are intentionally ignored
 
 ## Current behavior
 
@@ -70,6 +71,7 @@ dist/polymarket-theoretical-prob.user.js
   - touch pages use `America/New_York 23:59:59`
   - `before-YYYY` touch pages resolve to the prior New York year-end
   - binary `above-on / below-on` pages use `America/New_York 12:00:00`
+- Skips binary markets that include an explicit clock time in the slug or title
 - Injects `理论 xx.x%` next to the existing market probability in the row UI
 - Re-renders automatically on SPA navigation and DOM refreshes
 

@@ -50,7 +50,7 @@ export function isSupportedPage(location: Location): boolean {
   }
 
   const eventSlug = parseEventSlug(location.pathname);
-  return Boolean(eventSlug && isSupportedEventSlug(eventSlug));
+  return Boolean(eventSlug && isSupportedEventSlug(eventSlug) && !isBlockedMarketText(eventSlug));
 }
 
 export function parsePageContext(documentRef: Document, location: Location): PageContext | null {
@@ -69,6 +69,10 @@ export function parsePageContext(documentRef: Document, location: Location): Pag
   const marketDetails = parseMarketDetails(sourceText);
 
   if (!marketDetails) {
+    return null;
+  }
+
+  if (isBlockedMarketText(sourceText)) {
     return null;
   }
 
@@ -205,6 +209,10 @@ function parseMarketDetails(
     defaultDirection: binaryMatch[2] === "below" ? "down" : "up",
     pricingStyle: "binary",
   };
+}
+
+function isBlockedMarketText(text: string): boolean {
+  return BINARY_EVENT_PATTERN.test(text) && parseExplicitTime(text.toLowerCase()) !== null;
 }
 
 function locateRow(probabilityNode: HTMLElement): HTMLElement | null {

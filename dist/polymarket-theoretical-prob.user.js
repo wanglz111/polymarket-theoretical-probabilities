@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Polymarket Theoretical Probabilities
-// @version      0.2.0
+// @version      0.2.1
 // @description  Inject theoretical BTC, ETH, and SOL probabilities into Polymarket touch and binary target price markets
 // @match        https://polymarket.com/event/*
 // @connect      www.deribit.com
@@ -279,7 +279,7 @@
       return false;
     }
     const eventSlug = parseEventSlug(location.pathname);
-    return Boolean(eventSlug && isSupportedEventSlug(eventSlug));
+    return Boolean(eventSlug && isSupportedEventSlug(eventSlug) && !isBlockedMarketText(eventSlug));
   }
   function parsePageContext(documentRef, location) {
     const eventSlug = parseEventSlug(location.pathname);
@@ -293,6 +293,9 @@
     }
     const marketDetails = parseMarketDetails(sourceText);
     if (!marketDetails) {
+      return null;
+    }
+    if (isBlockedMarketText(sourceText)) {
       return null;
     }
     const underlying = parseUnderlying(sourceText);
@@ -385,6 +388,9 @@
       defaultDirection: binaryMatch[2] === "below" ? "down" : "up",
       pricingStyle: "binary"
     };
+  }
+  function isBlockedMarketText(text) {
+    return BINARY_EVENT_PATTERN.test(text) && parseExplicitTime(text.toLowerCase()) !== null;
   }
   function locateRow(probabilityNode) {
     let current = probabilityNode;

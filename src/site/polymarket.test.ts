@@ -221,7 +221,14 @@ describe("parsePageContext", () => {
     expect(expiry.getUTCSeconds()).toBe(0);
   });
 
-  it("parses explicit ET clock times on binary pages", () => {
+  it("rejects explicit ET clock binary pages as unsupported", () => {
+    expect(
+      isSupportedPage({
+        hostname: "polymarket.com",
+        pathname: "/event/bitcoin-above-on-march-21-2026-9am-et",
+      } as Location),
+    ).toBe(false);
+
     const page = parsePageContext(
       {
         querySelector: () => null,
@@ -232,20 +239,10 @@ describe("parsePageContext", () => {
       } as unknown as Location,
     );
 
-    const expiry = new Date(page!.expiryUtcMs);
-
-    expect(page?.underlying).toBe("BTC");
-    expect(page?.pricingStyle).toBe("binary");
-    expect(page?.defaultDirection).toBe("up");
-    expect(expiry.getUTCFullYear()).toBe(2026);
-    expect(expiry.getUTCMonth()).toBe(2);
-    expect(expiry.getUTCDate()).toBe(21);
-    expect(expiry.getUTCHours()).toBe(13);
-    expect(expiry.getUTCMinutes()).toBe(0);
-    expect(expiry.getUTCSeconds()).toBe(0);
+    expect(page).toBeNull();
   });
 
-  it("uses the page title as fallback context for explicit binary times", () => {
+  it("rejects binary pages when the title carries an explicit clock time", () => {
     const page = parsePageContext(
       {
         querySelector: () => ({
@@ -258,12 +255,7 @@ describe("parsePageContext", () => {
       } as unknown as Location,
     );
 
-    const expiry = new Date(page!.expiryUtcMs);
-
-    expect(page?.pricingStyle).toBe("binary");
-    expect(expiry.getUTCHours()).toBe(13);
-    expect(expiry.getUTCMinutes()).toBe(0);
-    expect(expiry.getUTCSeconds()).toBe(0);
+    expect(page).toBeNull();
   });
 
   it("parses below-on pages as binary down markets", () => {
