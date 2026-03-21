@@ -5,6 +5,7 @@ import { renderRowProbability } from "../ui/render";
 
 const REFRESH_MS = 60 * 60 * 1000;
 const DOM_REFRESH_DEBOUNCE_MS = 300;
+const MIN_DOM_REFRESH_INTERVAL_MS = 2_500;
 const URL_CHANGE_EVENT = "theoretical-probability:urlchange";
 
 export async function bootstrap(): Promise<void> {
@@ -17,13 +18,24 @@ export async function bootstrap(): Promise<void> {
   let refreshTimer: number | undefined;
   let domRefreshTimer: number | undefined;
   let refreshInFlight = false;
+  let lastRefreshAt = 0;
+  let pendingRefresh = false;
+  let pendingRefreshForce = false;
+  let queuedForceRefresh = false;
 
-  const runRefresh = async (): Promise<void> => {
-    if (refreshInFlight || !isSupportedPage(window.location)) {
+  const runRefresh = async (force = false): Promise<void> => {
+    if (!isSupportedPage(window.location)) {
+      return;
+    }
+
+    if (refreshInFlight) {
+      pendingRefresh = true;
+      pendingRefreshForce ||= force;
       return;
     }
 
     refreshInFlight = true;
+    lastRefreshAt = Date.now();
 
     try {
       const page = parsePageContext(document, window.location);
@@ -51,17 +63,32 @@ export async function bootstrap(): Promise<void> {
       console.error("[theoretical-probability] refresh failed", error);
     } finally {
       refreshInFlight = false;
+
+      if (pendingRefresh) {
+        const nextForce = pendingRefreshForce;
+        pendingRefresh = false;
+        pendingRefreshForce = false;
+        queueRefresh(nextForce);
+      }
     }
   };
 
-  const queueRefresh = (): void => {
+  const queueRefresh = (force = false): void => {
+    queuedForceRefresh ||= force;
+
     if (domRefreshTimer) {
       window.clearTimeout(domRefreshTimer);
     }
 
+    const throttleDelay = queuedForceRefresh
+      ? 0
+      : Math.max(0, MIN_DOM_REFRESH_INTERVAL_MS - (Date.now() - lastRefreshAt));
+
     domRefreshTimer = window.setTimeout(() => {
-      void runRefresh();
-    }, DOM_REFRESH_DEBOUNCE_MS);
+      const nextForce = queuedForceRefresh;
+      queuedForceRefresh = false;
+      void runRefresh(nextForce);
+    }, DOM_REFRESH_DEBOUNCE_MS + throttleDelay);
   };
 
   const scheduleRefresh = (): void => {
@@ -70,7 +97,7 @@ export async function bootstrap(): Promise<void> {
     }
 
     refreshTimer = window.setInterval(() => {
-      void runRefresh();
+      void runRefresh(true);
     }, REFRESH_MS);
   };
 
@@ -85,9 +112,9 @@ export async function bootstrap(): Promise<void> {
   });
 
   installHistoryHooks();
-  window.addEventListener("popstate", queueRefresh);
-  window.addEventListener("hashchange", queueRefresh);
-  window.addEventListener(URL_CHANGE_EVENT, queueRefresh);
+  window.addEventListener("popstate", () => queueRefresh(true));
+  window.addEventListener("hashchange", () => queueRefresh(true));
+  window.addEventListener(URL_CHANGE_EVENT, () => queueRefresh(true));
 
   observer.observe(document.documentElement, {
     childList: true,
@@ -100,7 +127,7 @@ export async function bootstrap(): Promise<void> {
     document.addEventListener(
       "DOMContentLoaded",
       () => {
-        void runRefresh();
+        void runRefresh(true);
       },
       { once: true },
     );
@@ -108,7 +135,7 @@ export async function bootstrap(): Promise<void> {
   }
 
   console.info("[theoretical-probability] bootstrap active", window.location.href);
-  await runRefresh();
+  await runRefresh(true);
 }
 
 function installHistoryHooks(): void {

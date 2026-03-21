@@ -238,6 +238,16 @@
   const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
   const SUPPORTED_EVENT_SLUG_PATTERN = /\b(bitcoin|btc|ethereum|eth|solana|sol)\b/i;
   const MARKET_TIME_ZONE = "America/New_York";
+  const DEFAULT_BINARY_EXPIRY_TIME = {
+    hour: 12,
+    minute: 0,
+    second: 0
+  };
+  const DEFAULT_TOUCH_EXPIRY_TIME = {
+    hour: 23,
+    minute: 59,
+    second: 59
+  };
   const MONTH_LOOKUP = {
     apr: 3,
     april: 3,
@@ -277,7 +287,7 @@
       return null;
     }
     const title = getNormalizedTitle(documentRef);
-    const sourceText = eventSlug ?? title;
+    const sourceText = [eventSlug, title].filter(Boolean).join(" ").trim();
     if (!sourceText) {
       return null;
     }
@@ -461,7 +471,17 @@
     const afterDayMatch = afterMonth.match(/^\s+(\d{1,2})(?!\d)/);
     const beforeDayMatch = beforeMonth.match(/(\d{1,2})\s+$/);
     const day = afterDayRangeMatch ? Number.parseInt(afterDayRangeMatch[2] ?? afterDayRangeMatch[1], 10) : afterDayMatch ? Number.parseInt(afterDayMatch[1], 10) : beforeDayMatch ? Number.parseInt(beforeDayMatch[1], 10) : lastUtcDayOfMonth(year, month);
-    return pricingStyle === "binary" ? zonedDateTimeToUtcMs(year, month, day, 12, 0, 0, MARKET_TIME_ZONE) : zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
+    const explicitTime = parseExplicitTime(lower);
+    const resolvedTime = pricingStyle === "binary" ? explicitTime ?? DEFAULT_BINARY_EXPIRY_TIME : DEFAULT_TOUCH_EXPIRY_TIME;
+    return zonedDateTimeToUtcMs(
+      year,
+      month,
+      day,
+      resolvedTime.hour,
+      resolvedTime.minute,
+      resolvedTime.second,
+      MARKET_TIME_ZONE
+    );
   }
   function parseEventSlug(pathname) {
     const match = pathname.match(/^\/event\/([^/]+)/i);
@@ -475,6 +495,23 @@
   }
   function lastUtcDayOfMonth(year, month) {
     return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  }
+  function parseExplicitTime(text) {
+    const match = text.match(/(?:^|[\s\-_\/])(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+    if (!match) {
+      return null;
+    }
+    const rawHour = Number.parseInt(match[1], 10);
+    const minute = match[2] ? Number.parseInt(match[2], 10) : 0;
+    if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) {
+      return null;
+    }
+    const normalizedHour = rawHour % 12;
+    return {
+      hour: match[3].toLowerCase() === "pm" ? normalizedHour + 12 : normalizedHour,
+      minute,
+      second: 0
+    };
   }
   function zonedDateTimeToUtcMs(year, month, day, hour, minute, second, timeZone) {
     const targetUtcLike = Date.UTC(year, month, day, hour, minute, second);
@@ -599,6 +636,7 @@
   }
   const REFRESH_MS = 60 * 60 * 1e3;
   const DOM_REFRESH_DEBOUNCE_MS = 300;
+  const MIN_DOM_REFRESH_INTERVAL_MS = 2500;
   const URL_CHANGE_EVENT = "theoretical-probability:urlchange";
   async function bootstrap() {
     if (!isSupportedPage(window.location)) {
@@ -609,11 +647,21 @@
     let refreshTimer;
     let domRefreshTimer;
     let refreshInFlight = false;
-    const runRefresh = async () => {
-      if (refreshInFlight || !isSupportedPage(window.location)) {
+    let lastRefreshAt = 0;
+    let pendingRefresh = false;
+    let pendingRefreshForce = false;
+    let queuedForceRefresh = false;
+    const runRefresh = async (force = false) => {
+      if (!isSupportedPage(window.location)) {
+        return;
+      }
+      if (refreshInFlight) {
+        pendingRefresh = true;
+        pendingRefreshForce ||= force;
         return;
       }
       refreshInFlight = true;
+      lastRefreshAt = Date.now();
       try {
         const page = parsePageContext(document, window.location);
         if (!page) {
@@ -635,22 +683,32 @@
         console.error("[theoretical-probability] refresh failed", error);
       } finally {
         refreshInFlight = false;
+        if (pendingRefresh) {
+          const nextForce = pendingRefreshForce;
+          pendingRefresh = false;
+          pendingRefreshForce = false;
+          queueRefresh(nextForce);
+        }
       }
     };
-    const queueRefresh = () => {
+    const queueRefresh = (force = false) => {
+      queuedForceRefresh ||= force;
       if (domRefreshTimer) {
         window.clearTimeout(domRefreshTimer);
       }
+      const throttleDelay = queuedForceRefresh ? 0 : Math.max(0, MIN_DOM_REFRESH_INTERVAL_MS - (Date.now() - lastRefreshAt));
       domRefreshTimer = window.setTimeout(() => {
-        void runRefresh();
-      }, DOM_REFRESH_DEBOUNCE_MS);
+        const nextForce = queuedForceRefresh;
+        queuedForceRefresh = false;
+        void runRefresh(nextForce);
+      }, DOM_REFRESH_DEBOUNCE_MS + throttleDelay);
     };
     const scheduleRefresh = () => {
       if (refreshTimer) {
         window.clearInterval(refreshTimer);
       }
       refreshTimer = window.setInterval(() => {
-        void runRefresh();
+        void runRefresh(true);
       }, REFRESH_MS);
     };
     const observer = new MutationObserver(() => {
@@ -662,9 +720,9 @@
       queueRefresh();
     });
     installHistoryHooks();
-    window.addEventListener("popstate", queueRefresh);
-    window.addEventListener("hashchange", queueRefresh);
-    window.addEventListener(URL_CHANGE_EVENT, queueRefresh);
+    window.addEventListener("popstate", () => queueRefresh(true));
+    window.addEventListener("hashchange", () => queueRefresh(true));
+    window.addEventListener(URL_CHANGE_EVENT, () => queueRefresh(true));
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true
@@ -674,14 +732,14 @@
       document.addEventListener(
         "DOMContentLoaded",
         () => {
-          void runRefresh();
+          void runRefresh(true);
         },
         { once: true }
       );
       return;
     }
     console.info("[theoretical-probability] bootstrap active", window.location.href);
-    await runRefresh();
+    await runRefresh(true);
   }
   function installHistoryHooks() {
     const historyRef = window.history;

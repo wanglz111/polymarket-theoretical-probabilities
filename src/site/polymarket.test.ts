@@ -221,6 +221,51 @@ describe("parsePageContext", () => {
     expect(expiry.getUTCSeconds()).toBe(0);
   });
 
+  it("parses explicit ET clock times on binary pages", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => null,
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/bitcoin-above-on-march-21-2026-9am-et",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.underlying).toBe("BTC");
+    expect(page?.pricingStyle).toBe("binary");
+    expect(page?.defaultDirection).toBe("up");
+    expect(expiry.getUTCFullYear()).toBe(2026);
+    expect(expiry.getUTCMonth()).toBe(2);
+    expect(expiry.getUTCDate()).toBe(21);
+    expect(expiry.getUTCHours()).toBe(13);
+    expect(expiry.getUTCMinutes()).toBe(0);
+    expect(expiry.getUTCSeconds()).toBe(0);
+  });
+
+  it("uses the page title as fallback context for explicit binary times", () => {
+    const page = parsePageContext(
+      {
+        querySelector: () => ({
+          textContent: "Bitcoin above on March 21, 2026 9am ET",
+        }),
+        title: "ignored",
+      } as unknown as Document,
+      {
+        pathname: "/event/bitcoin-above-on-march-21-2026",
+      } as unknown as Location,
+    );
+
+    const expiry = new Date(page!.expiryUtcMs);
+
+    expect(page?.pricingStyle).toBe("binary");
+    expect(expiry.getUTCHours()).toBe(13);
+    expect(expiry.getUTCMinutes()).toBe(0);
+    expect(expiry.getUTCSeconds()).toBe(0);
+  });
+
   it("parses below-on pages as binary down markets", () => {
     const page = parsePageContext(
       {

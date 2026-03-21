@@ -6,6 +6,16 @@ const HIT_EVENT_PATTERN = /what-price-will-(bitcoin|btc|ethereum|eth|solana|sol)
 const BINARY_EVENT_PATTERN = /(bitcoin|btc|ethereum|eth|solana|sol)-(above|below)-on/i;
 const SUPPORTED_EVENT_SLUG_PATTERN = /\b(bitcoin|btc|ethereum|eth|solana|sol)\b/i;
 const MARKET_TIME_ZONE = "America/New_York";
+const DEFAULT_BINARY_EXPIRY_TIME = {
+  hour: 12,
+  minute: 0,
+  second: 0,
+} as const;
+const DEFAULT_TOUCH_EXPIRY_TIME = {
+  hour: 23,
+  minute: 59,
+  second: 59,
+} as const;
 
 const MONTH_LOOKUP: Record<string, number> = {
   apr: 3,
@@ -50,7 +60,7 @@ export function parsePageContext(documentRef: Document, location: Location): Pag
   }
 
   const title = getNormalizedTitle(documentRef);
-  const sourceText = eventSlug ?? title;
+  const sourceText = [eventSlug, title].filter(Boolean).join(" ").trim();
 
   if (!sourceText) {
     return null;
@@ -328,10 +338,19 @@ function parseExpiryFromText(text: string, pricingStyle: "binary" | "touch"): nu
       : beforeDayMatch
         ? Number.parseInt(beforeDayMatch[1], 10)
         : lastUtcDayOfMonth(year, month);
+  const explicitTime = parseExplicitTime(lower);
+  const resolvedTime =
+    pricingStyle === "binary" ? explicitTime ?? DEFAULT_BINARY_EXPIRY_TIME : DEFAULT_TOUCH_EXPIRY_TIME;
 
-  return pricingStyle === "binary"
-    ? zonedDateTimeToUtcMs(year, month, day, 12, 0, 0, MARKET_TIME_ZONE)
-    : zonedDateTimeToUtcMs(year, month, day, 23, 59, 59, MARKET_TIME_ZONE);
+  return zonedDateTimeToUtcMs(
+    year,
+    month,
+    day,
+    resolvedTime.hour,
+    resolvedTime.minute,
+    resolvedTime.second,
+    MARKET_TIME_ZONE,
+  );
 }
 
 function parseEventSlug(pathname: string): string | null {
@@ -350,6 +369,29 @@ function isSupportedEventSlug(eventSlug: string): boolean {
 
 function lastUtcDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+function parseExplicitTime(text: string): { hour: number; minute: number; second: number } | null {
+  const match = text.match(/(?:^|[\s\-_\/])(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const rawHour = Number.parseInt(match[1], 10);
+  const minute = match[2] ? Number.parseInt(match[2], 10) : 0;
+
+  if (rawHour < 1 || rawHour > 12 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  const normalizedHour = rawHour % 12;
+
+  return {
+    hour: match[3].toLowerCase() === "pm" ? normalizedHour + 12 : normalizedHour,
+    minute,
+    second: 0,
+  };
 }
 
 function zonedDateTimeToUtcMs(
