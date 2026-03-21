@@ -636,7 +636,9 @@
   }
   const REFRESH_MS = 60 * 60 * 1e3;
   const DOM_REFRESH_DEBOUNCE_MS = 300;
-  const MIN_DOM_REFRESH_INTERVAL_MS = 2500;
+  const MIN_DOM_REFRESH_INTERVAL_MS = 5e3;
+  const CACHE_TTL_MS = 3e4;
+  const OBSERVER_ACTIVE_WINDOW_MS = 12e3;
   const URL_CHANGE_EVENT = "theoretical-probability:urlchange";
   async function bootstrap() {
     if (!isSupportedPage(window.location)) {
@@ -646,11 +648,53 @@
     let lastUrl = window.location.href;
     let refreshTimer;
     let domRefreshTimer;
+    let observerWindowTimer;
     let refreshInFlight = false;
     let lastRefreshAt = 0;
     let pendingRefresh = false;
     let pendingRefreshForce = false;
     let queuedForceRefresh = false;
+    let observerConnected = false;
+    let cachedSignature = null;
+    let cachedResolved = [];
+    let cachedAt = 0;
+    const observer = new MutationObserver((records) => {
+      if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
+        activateObserverWindow();
+        queueRefresh(true);
+        return;
+      }
+      if (!hasRelevantMutations(records)) {
+        return;
+      }
+      queueRefresh();
+    });
+    const disconnectObserver = () => {
+      if (!observerConnected) {
+        return;
+      }
+      observer.disconnect();
+      observerConnected = false;
+    };
+    const scheduleObserverDisconnect = () => {
+      if (observerWindowTimer) {
+        window.clearTimeout(observerWindowTimer);
+      }
+      observerWindowTimer = window.setTimeout(() => {
+        disconnectObserver();
+      }, OBSERVER_ACTIVE_WINDOW_MS);
+    };
+    const activateObserverWindow = () => {
+      if (!observerConnected) {
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+        observerConnected = true;
+      }
+      scheduleObserverDisconnect();
+    };
     const runRefresh = async (force = false) => {
       if (!isSupportedPage(window.location)) {
         return;
@@ -669,9 +713,13 @@
         }
         const rows = collectPriceRows(document.body, page);
         if (rows.length === 0) {
+          activateObserverWindow();
           return;
         }
-        const resolved = await computeTheoreticalProbabilities({
+        const signature = buildRefreshSignature(page, rows);
+        const now = Date.now();
+        const canUseCachedResult = !force && cachedSignature === signature && now - cachedAt <= CACHE_TTL_MS;
+        const resolved = canUseCachedResult ? rebindCachedRows(rows, cachedResolved) : await computeTheoreticalProbabilities({
           page,
           rows,
           deribit
@@ -679,6 +727,15 @@
         resolved.forEach((item) => {
           renderRowProbability(item.row, item.value);
         });
+        if (!canUseCachedResult) {
+          cachedSignature = signature;
+          cachedResolved = resolved.map((item) => ({
+            row: item.row,
+            value: item.value
+          }));
+          cachedAt = now;
+        }
+        scheduleObserverDisconnect();
       } catch (error) {
         console.error("[theoretical-probability] refresh failed", error);
       } finally {
@@ -711,22 +768,20 @@
         void runRefresh(true);
       }, REFRESH_MS);
     };
-    const observer = new MutationObserver(() => {
-      if (window.location.href !== lastUrl) {
-        lastUrl = window.location.href;
-        queueRefresh();
-        return;
-      }
-      queueRefresh();
-    });
     installHistoryHooks();
-    window.addEventListener("popstate", () => queueRefresh(true));
-    window.addEventListener("hashchange", () => queueRefresh(true));
-    window.addEventListener(URL_CHANGE_EVENT, () => queueRefresh(true));
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
+    window.addEventListener("popstate", () => {
+      activateObserverWindow();
+      queueRefresh(true);
     });
+    window.addEventListener("hashchange", () => {
+      activateObserverWindow();
+      queueRefresh(true);
+    });
+    window.addEventListener(URL_CHANGE_EVENT, () => {
+      activateObserverWindow();
+      queueRefresh(true);
+    });
+    activateObserverWindow();
     scheduleRefresh();
     if (document.readyState === "loading") {
       document.addEventListener(
@@ -740,6 +795,51 @@
     }
     console.info("[theoretical-probability] bootstrap active", window.location.href);
     await runRefresh(true);
+  }
+  function buildRefreshSignature(page, rows) {
+    return [
+      page.slug,
+      page.pricingStyle,
+      page.expiryUtcMs,
+      page.underlying,
+      rows.map((row) => `${row.direction}:${row.barrier}`).join("|")
+    ].join("::");
+  }
+  function rebindCachedRows(rows, cachedResolved) {
+    const valueByKey = new Map(
+      cachedResolved.map((item) => [`${item.row.direction}:${item.row.barrier}`, item.value])
+    );
+    return rows.map((row) => ({
+      row,
+      value: valueByKey.get(`${row.direction}:${row.barrier}`) ?? 0
+    }));
+  }
+  function hasRelevantMutations(records) {
+    return records.some((record) => {
+      if (record.type !== "childList") {
+        return false;
+      }
+      return hasRelevantNodes(record.addedNodes) || hasRelevantNodes(record.removedNodes);
+    });
+  }
+  function hasRelevantNodes(nodes) {
+    return Array.from(nodes).some((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return false;
+      }
+      if (node.hasAttribute("data-theoretical-probability")) {
+        return false;
+      }
+      if (node.querySelector?.("[data-theoretical-probability]")) {
+        const nonTheoreticalDescendant = Array.from(node.children).some(
+          (child) => !(child instanceof HTMLElement) || !child.hasAttribute("data-theoretical-probability")
+        );
+        if (!nonTheoreticalDescendant) {
+          return false;
+        }
+      }
+      return Boolean(node.querySelector?.("button, p, span") || /^(BUTTON|P|SPAN)$/.test(node.tagName));
+    });
   }
   function installHistoryHooks() {
     const historyRef = window.history;
